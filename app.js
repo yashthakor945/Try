@@ -7,6 +7,9 @@ for(const l in T)T[l]=T[l].split('|');
 let D;try{D=JSON.parse(localStorage.getItem(K))}catch(x){}
 if(!D||!Array.isArray(D.acc)||!Array.isArray(D.motors))D={lang:'en',acc:[],motors:[]};
 const save=()=>localStorage.setItem(K,JSON.stringify(D));
+const DEF=[["0.5 HP TP",50],["1 HP TP",50],["2 HP TP",50],["3 HP TP",50],["5 HP TP",50],["7.5 HP TP",80],["10 HP TP",100],["0.5 HP SP",70],["1 HP SP",70],["2 HP SP",70],["3 HP SP",70]];
+function seed(){if(!D.rates||typeof D.rates!=='object'||Array.isArray(D.rates))D.rates={};if(D.seeded)return;DEF.forEach(([n,r])=>{const f=D.motors.find(m=>m.toLowerCase()===n.toLowerCase()),x=f||n;if(!f)D.motors.push(n);if(typeof D.rates[x]!=='number')D.rates[x]=r});D.seeded=1;save()}
+seed();
 const t=k=>(T[D.lang]||T.en)[KS.indexOf(k)];
 const loc=()=>({en:'en-IN',hi:'hi-IN',gu:'gu-IN'})[D.lang]||'en-IN';
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -39,7 +42,8 @@ function editAcc(id){const a=D.acc.find(x=>x.id===id),n=(prompt(t('accName'),a.n
 function delAcc(id){if(confirm(t('confirm'))){D.acc=D.acc.filter(a=>a.id!==id);save();render()}}
 /* ---------- entries ---------- */
 function pv(){$('#pv').textContent=money(Math.round((+$('#q').value||0)*(+$('#r').value||0)*100)/100)}
-function autoRate(){if(editId||$('#r').value)return;const l=[...A().e].reverse().find(e=>e.m===$('#m').value);if(l){$('#r').value=l.r;pv()}}
+function rateOf(m){const v=D.rates[m];if(typeof v==='number')return v;const l=[...A().e].reverse().find(e=>e.m===m);return l?l.r:''}
+function autoRate(f){if(editId||(!f&&$('#r').value))return;$('#r').value=rateOf($('#m').value);pv()}
 function saveE(){const a=A(),m=$('#m').value,q=parseFloat($('#q').value),r=parseFloat($('#r').value);
  if(!m)return toast(t('noMotor'));if(!(q>0)||isNaN(r)||r<0)return toast(t('fill'));
  if(editId)Object.assign(a.e.find(e=>e.id===editId),{m,q,r});else a.e.push({id:uid(),d:date,m,q,r});
@@ -47,9 +51,10 @@ function saveE(){const a=A(),m=$('#m').value,q=parseFloat($('#q').value),r=parse
 function editE(id){editId=id;render();scrollTo(0,0)}
 function delE(id){if(confirm(t('confirm'))){const a=A();a.e=a.e.filter(e=>e.id!==id);if(editId===id)editId=null;save();render()}}
 /* ---------- motors ---------- */
-function addM(){const n=$('#nm').value.trim();if(!n)return;if(D.motors.some(m=>m.toLowerCase()===n.toLowerCase()))return toast('✓');D.motors.push(n);save();render()}
-function editM(i){const o=D.motors[i],n=(prompt(t('motor'),o)||'').trim();if(!n||n===o)return;D.motors[i]=n;D.acc.forEach(a=>a.e.forEach(e=>{if(e.m===o)e.m=n}));save();render()}
-function delM(i){if(confirm(t('confirm'))){D.motors.splice(i,1);save();render()}}
+function addM(){const n=$('#nm').value.trim();if(!n)return;if(D.motors.some(m=>m.toLowerCase()===n.toLowerCase()))return toast('✓');D.motors.push(n);const r=parseFloat($('#nr').value);if(!isNaN(r)&&r>=0)D.rates[n]=r;save();render()}
+function editM(i){const o=D.motors[i],n=(prompt(t('motor'),o)||'').trim();if(!n||n===o)return;D.motors[i]=n;if(D.rates[o]!==undefined){D.rates[n]=D.rates[o];delete D.rates[o]}D.acc.forEach(a=>a.e.forEach(e=>{if(e.m===o)e.m=n}));save();render()}
+function delM(i){if(confirm(t('confirm'))){delete D.rates[D.motors[i]];D.motors.splice(i,1);save();render()}}
+function setRate(i,v){const x=parseFloat(v);if(isNaN(x)||x<0){toast(t('fill'));return render()}D.rates[D.motors[i]]=x;save();toast('✓')}
 /* ---------- export / backup ---------- */
 function dl(n,s,ty){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([s],{type:ty}));a.download=n;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
 const csv=rows=>'\ufeff'+['Account,Date,Motor,Qty,Rate,Amount',...rows.map(r=>[r.a,r.d,r.m,r.q,r.r,r.t].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(','))].join('\n');
@@ -59,7 +64,7 @@ function csvRep(){dl('your-hisab-report-'+iso(now)+'.csv',csv(rd()),'text/csv')}
 function backup(){dl('your-hisab-backup-'+iso(now)+'.json',JSON.stringify(D),'application/json')}
 function restore(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();
  r.onload=()=>{try{const j=JSON.parse(r.result);if(!Array.isArray(j.acc)||!Array.isArray(j.motors))throw 0;
-  if(!confirm(t('restore')+'?'))return;D={lang:j.lang||D.lang,acc:j.acc,motors:j.motors};save();render();toast('✓')}catch(x){toast('Invalid backup file')}inp.value=''};r.readAsText(f)}
+  if(!confirm(t('restore')+'?'))return;D={lang:j.lang||D.lang,acc:j.acc,motors:j.motors,rates:j.rates||{},seeded:j.seeded};seed();save();render();toast('✓')}catch(x){toast('Invalid backup file')}inp.value=''};r.readAsText(f)}
 /* ---------- reports ---------- */
 function rd(){let f=R.from,e=R.to;if(R.mode==='monthly'){f=R.month+'-01';e=R.month+'-31'}
  const all=R.mode==='customer'||R.mode==='all'||R.acc==='all',rows=[];
@@ -91,7 +96,7 @@ function accView(){const a=A(),y=cal.getFullYear(),m=cal.getMonth(),ms=iso(cal).
  <div class="card"><div class="mh"><button class="ic" onclick="mon(-1)">‹</button><span>${cal.toLocaleDateString(loc(),{month:'long',year:'numeric'})}</span><button class="ic" onclick="mon(1)">›</button></div><div class="cal">${c}</div></div>`}
 function dayView(){const a=A(),es=a.e.filter(e=>e.d===date),ed=es.find(e=>e.id===editId)||{},ms=[...new Set([...(ed.m?[ed.m]:[]),...D.motors])];
  return `<button class="sec" onclick="back()">← ${esc(a.n)}</button><h2>${fmtd(date)}</h2>
- <div class="card">${D.motors.length?'':`<p class="warn">${t('noMotor')}</p>`}<label>${t('motor')}</label><select id="m" onchange="autoRate()">${ms.map(m=>`<option${m===ed.m?' selected':''}>${esc(m)}</option>`).join('')}</select>
+ <div class="card">${D.motors.length?'':`<p class="warn">${t('noMotor')}</p>`}<label>${t('motor')}</label><select id="m" onchange="autoRate(true)">${ms.map(m=>`<option${m===ed.m?' selected':''}>${esc(m)}</option>`).join('')}</select>
  <div class="f2"><div><label>${t('qty')}</label><input id="q" type="number" inputmode="decimal" step="any" min="0" value="${ed.q??''}" oninput="pv()"></div><div><label>${t('rate')}</label><input id="r" type="number" inputmode="decimal" step="any" min="0" value="${ed.r??''}" oninput="pv()"></div></div>
  <p style="margin:10px 0">${t('amount')}: <b id="pv">${money(ed.id?amt(ed):0)}</b></p><button class="pri" onclick="saveE()">${ed.id?t('update'):t('add')}</button></div>
  <div class="hero"><small>${t('dayTotal')}</small><h1 style="margin-bottom:0">${money(sum(es))}</h1></div>
@@ -102,7 +107,7 @@ function hisab(){if(!D.acc.length)return `<h2>${t('hisab')}</h2><div class="card
  <div class="hero" style="margin-top:12px"><small>${t('total')}</small><h1 style="margin-bottom:0">${money(sum(a.e))}</h1></div>
  ${Object.keys(by).sort().reverse().map(d=>`<div class="card go" onclick="jump('${a.id}','${d}')">${tb([t('date'),t('motor'),t('qty'),t('rate'),t('amount')],by[d].map(e=>[fmtd(d),esc(e.m),num(e.q),num(e.r),money(amt(e))]),[t('dayTotal'),'',num(by[d].reduce((s,e)=>s+e.q,0)),'',money(sum(by[d]))],2)}</div>`).join('')||`<div class="card"><small>${t('noEntry')}</small></div>`}`}
 function more(){return `<h2>${t('language')}</h2><div class="card f3">${[['en','English'],['hi','हिन्दी'],['gu','ગુજરાતી']].map(([c,n])=>`<button class="sec${D.lang===c?' on':''}" onclick="setLang('${c}')">${n}</button>`).join('')}</div>
- <h2>${t('motors')}</h2><div class="card"><div class="row"><input id="nm" placeholder="${t('addMotor')}" onkeydown="if(event.key==='Enter')addM()"><button class="pri" style="width:auto" onclick="addM()">+</button></div>${D.motors.map((m,i)=>`<div class="row" style="padding-top:10px"><div class="g"><b>${esc(m)}</b></div><button class="ic" onclick="editM(${i})">✎</button><button class="ic" onclick="delM(${i})">🗑</button></div>`).join('')}</div>
+ <h2>${t('motors')}</h2><div class="card"><div class="row"><input id="nm" placeholder="${t('addMotor')}" onkeydown="if(event.key==='Enter')addM()"><input id="nr" type="number" inputmode="decimal" step="any" min="0" placeholder="₹" style="width:84px;flex:none"><button class="pri" style="width:auto" onclick="addM()">+</button></div>${D.motors.map((m,i)=>`<div class="row" style="padding-top:10px"><div class="g"><b>${esc(m)}</b></div><input type="number" inputmode="decimal" step="any" min="0" placeholder="₹" value="${D.rates[m]??''}" onchange="setRate(${i},this.value)" style="width:84px;flex:none"><button class="ic" onclick="editM(${i})">✎</button><button class="ic" onclick="delM(${i})">🗑</button></div>`).join('')}</div>
  <h2>${t('backup')}</h2><div class="card f2"><button class="sec" onclick="backup()">${t('backup')}</button><button class="sec" onclick="$('#rf').click()">${t('restore')}</button><button class="sec" onclick="csvAll()" style="grid-column:span 2">${t('csv')}</button><input id="rf" type="file" accept=".json,application/json" hidden onchange="restore(this)"></div>`}
 /* ---------- calculator ---------- */
 let ex='',sm='',eq=false;
